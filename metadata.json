@@ -1,0 +1,6 @@
+{
+  "name": "Crunchyroll",
+  "description": "Stream thousands of anime shows, simulcasts, and movies in HD with dubs and subs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
