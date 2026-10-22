@@ -1,12 +1,13 @@
-import { Anime, Episode, WatchProgress, WatchlistItem, Comment, WatchStatus } from '../types';
+import { Anime, Episode, WatchProgress, WatchlistItem, Comment, WatchStatus, OfflineEpisode } from '../types';
 import { INITIAL_ANIME_LIST, INITIAL_EPISODES } from './mockData';
 
 const KEYS = {
-  ANIME_LIST: 'aniverse_anime_list_v3',
-  EPISODES_LIST: 'aniverse_episodes_list_v3',
+  ANIME_LIST: 'aniverse_anime_list_v6',
+  EPISODES_LIST: 'aniverse_episodes_list_v6',
   WATCH_PROGRESS: 'aniverse_watch_progress_v1',
   WATCHLIST: 'aniverse_watchlist_v1',
   COMMENTS: 'aniverse_comments_v1',
+  OFFLINE_EPISODES: 'aniverse_offline_episodes_v1',
 };
 
 // LocalStorage Helper functions
@@ -18,14 +19,24 @@ export function getStoredAnimeList(): Anime[] {
       return INITIAL_ANIME_LIST;
     }
     const parsed: Anime[] = JSON.parse(raw);
-    const existingIds = new Set(parsed.map(a => a.id));
-    const missing = INITIAL_ANIME_LIST.filter(a => !existingIds.has(a.id));
+    
+    // Deduplicate parsed array
+    const seen = new Set<string>();
+    const deduplicatedParsed: Anime[] = [];
+    for (const a of parsed) {
+      if (a && a.id && !seen.has(a.id)) {
+        seen.add(a.id);
+        deduplicatedParsed.push(a);
+      }
+    }
+
+    const missing = INITIAL_ANIME_LIST.filter(a => !seen.has(a.id));
     if (missing.length > 0) {
-      const merged = [...parsed, ...missing];
+      const merged = [...deduplicatedParsed, ...missing];
       localStorage.setItem(KEYS.ANIME_LIST, JSON.stringify(merged));
       return merged;
     }
-    return parsed;
+    return deduplicatedParsed;
   } catch (err) {
     console.error('Error loading anime list:', err);
     return INITIAL_ANIME_LIST;
@@ -42,7 +53,7 @@ export function saveAnimeList(list: Anime[]): void {
 
 export function addAnimeSeries(newAnime: Anime): Anime[] {
   const current = getStoredAnimeList();
-  const updated = [newAnime, ...current];
+  const updated = [newAnime, ...current.filter(a => a.id !== newAnime.id)];
   saveAnimeList(updated);
   return updated;
 }
@@ -55,14 +66,24 @@ export function getStoredEpisodes(): Episode[] {
       return INITIAL_EPISODES;
     }
     const parsed: Episode[] = JSON.parse(raw);
-    const existingIds = new Set(parsed.map(e => e.id));
-    const missing = INITIAL_EPISODES.filter(e => !existingIds.has(e.id));
+
+    // Deduplicate parsed episodes
+    const seen = new Set<string>();
+    const deduplicatedEpisodes: Episode[] = [];
+    for (const e of parsed) {
+      if (e && e.id && !seen.has(e.id)) {
+        seen.add(e.id);
+        deduplicatedEpisodes.push(e);
+      }
+    }
+
+    const missing = INITIAL_EPISODES.filter(e => !seen.has(e.id));
     if (missing.length > 0) {
-      const merged = [...parsed, ...missing];
+      const merged = [...deduplicatedEpisodes, ...missing];
       localStorage.setItem(KEYS.EPISODES_LIST, JSON.stringify(merged));
       return merged;
     }
-    return parsed;
+    return deduplicatedEpisodes;
   } catch (err) {
     console.error('Error loading episodes list:', err);
     return INITIAL_EPISODES;
@@ -204,3 +225,119 @@ function getInitialComments(): Comment[] {
     }
   ];
 }
+
+// ==========================================
+// OFFLINE EPISODES CACHING MECHANISM
+// ==========================================
+
+export const OFFLINE_CHANGE_EVENT = 'aniverse_offline_changed';
+
+function dispatchOfflineChange() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(OFFLINE_CHANGE_EVENT));
+  }
+}
+
+export function getOfflineEpisodes(): OfflineEpisode[] {
+  try {
+    const raw = localStorage.getItem(KEYS.OFFLINE_EPISODES);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.error('Error reading offline episodes from localStorage:', e);
+    return [];
+  }
+}
+
+export function isEpisodeAvailableOffline(episodeId: string): boolean {
+  if (!episodeId) return false;
+  const list = getOfflineEpisodes();
+  return list.some(item => item.episodeId === episodeId && item.isAvailableOffline);
+}
+
+export function toggleEpisodeOffline(episode: Episode, anime: Anime): { isOffline: boolean; item: OfflineEpisode | null } {
+  try {
+    const list = getOfflineEpisodes();
+    const existingIndex = list.findIndex(item => item.episodeId === episode.id);
+
+    if (existingIndex >= 0) {
+      // Remove from offline
+      list.splice(existingIndex, 1);
+      localStorage.setItem(KEYS.OFFLINE_EPISODES, JSON.stringify(list));
+      dispatchOfflineChange();
+      return { isOffline: false, item: null };
+    } else {
+      // Calculate realistic file size estimate: ~300-450MB based on duration & 1080p
+      const durationMins = (episode.duration || 1440) / 60;
+      const estimatedBytes = Math.round(durationMins * 18 * 1024 * 1024); // ~18MB per minute for 1080p
+
+      const newItem: OfflineEpisode = {
+        episodeId: episode.id,
+        animeId: anime.id,
+        animeTitle: anime.title,
+        episodeNumber: episode.episodeNumber,
+        title: episode.title,
+        synopsis: episode.synopsis,
+        thumbnailUrl: episode.thumbnailUrl || anime.coverImage,
+        videoUrl: episode.videoUrl,
+        duration: episode.duration || 1440,
+        quality: episode.quality || '1080P Full HD',
+        language: episode.language || 'Sub / Dual Audio',
+        seasonName: episode.seasonName || 'Season 1',
+        partRange: episode.partRange,
+        markedOfflineAt: new Date().toISOString(),
+        isAvailableOffline: true,
+        estimatedSizeBytes: estimatedBytes,
+      };
+
+      list.unshift(newItem);
+      localStorage.setItem(KEYS.OFFLINE_EPISODES, JSON.stringify(list));
+      dispatchOfflineChange();
+      return { isOffline: true, item: newItem };
+    }
+  } catch (err) {
+    console.error('Error toggling offline status:', err);
+    return { isOffline: false, item: null };
+  }
+}
+
+export function removeOfflineEpisode(episodeId: string): void {
+  try {
+    const list = getOfflineEpisodes();
+    const updated = list.filter(item => item.episodeId !== episodeId);
+    localStorage.setItem(KEYS.OFFLINE_EPISODES, JSON.stringify(updated));
+    dispatchOfflineChange();
+  } catch (err) {
+    console.error('Error removing offline episode:', err);
+  }
+}
+
+export function clearAllOfflineEpisodes(): void {
+  try {
+    localStorage.removeItem(KEYS.OFFLINE_EPISODES);
+    dispatchOfflineChange();
+  } catch (err) {
+    console.error('Error clearing offline episodes:', err);
+  }
+}
+
+export function getOfflineStorageEstimate(): { totalCount: number; formattedSize: string; totalBytes: number } {
+  const list = getOfflineEpisodes();
+  const totalBytes = list.reduce((acc, curr) => acc + (curr.estimatedSizeBytes || 350 * 1024 * 1024), 0);
+  
+  if (totalBytes === 0) {
+    return { totalCount: 0, formattedSize: '0 MB', totalBytes: 0 };
+  }
+  if (totalBytes > 1024 * 1024 * 1024) {
+    return {
+      totalCount: list.length,
+      formattedSize: `${(totalBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`,
+      totalBytes
+    };
+  }
+  return {
+    totalCount: list.length,
+    formattedSize: `${Math.round(totalBytes / (1024 * 1024))} MB`,
+    totalBytes
+  };
+}
+

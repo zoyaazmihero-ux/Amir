@@ -1,6 +1,13 @@
-import React, { useState } from 'react';
-import { Bookmark, Crown, Play, Trash2, Plus, Clock, Download, ArrowRight } from 'lucide-react';
-import { Anime, WatchlistItem, WatchProgress, MainTab } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Bookmark, Crown, Play, Trash2, Plus, Clock, Download, ArrowRight, HardDriveDownload, CheckCircle2, WifiOff } from 'lucide-react';
+import { Anime, WatchlistItem, WatchProgress, MainTab, OfflineEpisode } from '../types';
+import { 
+  getOfflineEpisodes, 
+  removeOfflineEpisode, 
+  clearAllOfflineEpisodes, 
+  getOfflineStorageEstimate, 
+  OFFLINE_CHANGE_EVENT 
+} from '../lib/storage';
 
 interface WatchlistPageProps {
   animeList: Anime[];
@@ -22,6 +29,20 @@ export const WatchlistPage: React.FC<WatchlistPageProps> = ({
   setCurrentTab,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'watchlist' | 'crunchylists' | 'history' | 'downloads'>('watchlist');
+  const [offlineEpisodes, setOfflineEpisodes] = useState<OfflineEpisode[]>(getOfflineEpisodes);
+  const [offlineStorageInfo, setOfflineStorageInfo] = useState(getOfflineStorageEstimate);
+
+  useEffect(() => {
+    const syncOffline = () => {
+      setOfflineEpisodes(getOfflineEpisodes());
+      setOfflineStorageInfo(getOfflineStorageEstimate());
+    };
+    syncOffline();
+    window.addEventListener(OFFLINE_CHANGE_EVENT, syncOffline);
+    return () => {
+      window.removeEventListener(OFFLINE_CHANGE_EVENT, syncOffline);
+    };
+  }, []);
   const [crunchylists, setCrunchylists] = useState([
     { id: 'cl-1', title: 'Top Shonen Anime', count: 4, cover: animeList[0]?.coverImage || '' },
     { id: 'cl-[#FF640A]', title: 'Late Night Binge', count: 2, cover: animeList[1]?.coverImage || '' }
@@ -272,17 +293,152 @@ export const WatchlistPage: React.FC<WatchlistPageProps> = ({
           </div>
         )}
 
-        {/* TAB 4: DOWNLOADS */}
+        {/* TAB 4: OFFLINE DOWNLOADS & CACHED EPISODES */}
         {activeSubTab === 'downloads' && (
-          <div className="p-8 text-center bg-zinc-900 border border-zinc-800 rounded-xl space-y-3">
-            <Download className="w-10 h-10 text-amber-400 mx-auto" />
-            <h2 className="text-lg font-bold text-white">Offline Downloads</h2>
-            <p className="text-xs text-zinc-400 max-w-md mx-auto">
-              Download your favorite anime episodes to watch offline anytime without an internet connection.
-            </p>
-            <span className="inline-block px-3 py-1 bg-amber-500/20 text-amber-400 text-xs font-bold rounded-full">
-              PREMIUM FEATURE
-            </span>
+          <div className="space-y-6">
+            
+            {/* Storage Header & Stats */}
+            <div className="p-5 bg-zinc-950 border border-zinc-900 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <HardDriveDownload className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-black text-white">
+                      Available Offline (ऑफ़लाइन उपलब्ध)
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase">
+                      Cached in LocalStorage
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    {offlineStorageInfo.totalCount > 0 
+                      ? `${offlineStorageInfo.totalCount} episodes saved • ~${offlineStorageInfo.formattedSize} storage used` 
+                      : 'Episodes marked as available offline will appear here for viewing without an active internet connection.'}
+                  </p>
+                </div>
+              </div>
+
+              {offlineStorageInfo.totalCount > 0 && (
+                <button
+                  onClick={() => {
+                    if (window.confirm('क्या आप सभी ऑफ़लाइन कैश्ड एपिसोड्स को हटाना चाहते हैं?')) {
+                      clearAllOfflineEpisodes();
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-red-950/60 hover:text-red-300 hover:border-red-800 border border-zinc-800 text-xs font-bold transition-all text-zinc-400 self-start sm:self-auto flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Clear Offline Cache
+                </button>
+              )}
+            </div>
+
+            {/* Offline Episodes List */}
+            {offlineEpisodes.length === 0 ? (
+              <div className="p-10 text-center bg-zinc-950/60 border border-zinc-900 rounded-2xl space-y-4">
+                <HardDriveDownload className="w-12 h-12 text-zinc-600 mx-auto" />
+                <div className="space-y-1">
+                  <h3 className="text-base font-black text-white">No Offline Episodes Yet</h3>
+                  <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                    When watching an episode or browsing series details, click <span className="text-emerald-400 font-bold">"ऑफ़लाइन सेव करें"</span> to save it for viewing without an active internet connection.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setCurrentTab('browse')}
+                  className="px-5 py-2.5 rounded-full bg-[#FF640A] hover:bg-[#e05300] text-black font-black text-xs uppercase transition-all shadow-lg cursor-pointer"
+                >
+                  Browse Anime to Save
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {offlineEpisodes.map((item) => {
+                  const targetAnime = animeList.find(a => a.id === item.animeId);
+                  const formattedMins = Math.floor(item.duration / 60);
+
+                  return (
+                    <div
+                      key={item.episodeId}
+                      className="p-3.5 sm:p-4 rounded-xl bg-zinc-950 border border-zinc-900 hover:border-zinc-800 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
+                    >
+                      <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
+                        {/* Thumbnail */}
+                        <div 
+                          onClick={() => onPlayEpisode(item.animeId, item.episodeNumber)}
+                          className="relative w-28 sm:w-36 h-20 rounded-lg overflow-hidden bg-zinc-900 shrink-0 cursor-pointer"
+                        >
+                          <img
+                            src={item.thumbnailUrl}
+                            alt={item.title}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                          <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 flex items-center justify-center transition-colors">
+                            <div className="w-8 h-8 rounded-full bg-[#FF640A] text-black flex items-center justify-center shadow-md">
+                              <Play className="w-4 h-4 fill-black text-black ml-0.5" />
+                            </div>
+                          </div>
+                          <span className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/85 text-[9px] font-black text-emerald-400 rounded border border-emerald-900/50 flex items-center gap-0.5">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            Offline
+                          </span>
+                        </div>
+
+                        {/* Details */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className="text-[11px] font-black text-[#FF640A] uppercase tracking-wide">
+                              {item.animeTitle} • Ep {item.episodeNumber}
+                            </span>
+                            <span className="text-[9px] font-bold text-zinc-400 bg-zinc-900 px-1.5 py-0.2 rounded border border-zinc-800">
+                              {item.quality || '1080P Full HD'}
+                            </span>
+                            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-900/60">
+                              {item.language || 'Multi-Audio'}
+                            </span>
+                          </div>
+
+                          <h4 
+                            onClick={() => onPlayEpisode(item.animeId, item.episodeNumber)}
+                            className="text-xs sm:text-sm font-bold text-white group-hover:text-[#FF640A] transition-colors line-clamp-1 cursor-pointer"
+                          >
+                            {item.title}
+                          </h4>
+
+                          <p className="text-[11px] text-zinc-400 flex items-center gap-3 mt-1">
+                            <span>⏱️ {formattedMins} mins</span>
+                            <span>📦 ~{Math.round((item.estimatedSizeBytes || 350 * 1024 * 1024) / (1024 * 1024))} MB</span>
+                            <span className="hidden md:inline">Saved {new Date(item.markedOfflineAt).toLocaleDateString()}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2.5 self-end sm:self-center shrink-0">
+                        <button
+                          onClick={() => onPlayEpisode(item.animeId, item.episodeNumber)}
+                          className="px-4 py-2 rounded-full bg-[#FF640A] hover:bg-[#e05300] text-black font-extrabold text-xs uppercase flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-black" />
+                          Watch Offline
+                        </button>
+
+                        <button
+                          onClick={() => removeOfflineEpisode(item.episodeId)}
+                          className="p-2 rounded-full bg-zinc-900 hover:bg-red-950 hover:text-red-400 text-zinc-400 border border-zinc-800 transition-colors cursor-pointer"
+                          title="Remove from Offline Cache"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
           </div>
         )}
 

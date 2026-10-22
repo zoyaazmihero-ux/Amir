@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { X, Play, Star, Bookmark, Share2, Plus, Check, ChevronDown, Award, Download, ExternalLink, Volume2, Film } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Play, Star, Bookmark, Share2, Plus, Check, ChevronDown, Award, Download, ExternalLink, Volume2, Film, HardDriveDownload, CheckCircle2 } from 'lucide-react';
 import { Anime, Episode, WatchlistItem } from '../types';
+import { isEpisodeAvailableOffline, toggleEpisodeOffline, OFFLINE_CHANGE_EVENT } from '../lib/storage';
 
 interface AnimeDetailModalProps {
   anime: Anime | null;
@@ -21,6 +22,34 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
 }) => {
   const [showFullSynopsis, setShowFullSynopsis] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState('Season 1');
+  const [offlineMap, setOfflineMap] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!anime) return;
+    const updateOfflineMap = () => {
+      const map: Record<string, boolean> = {};
+      episodes.filter(ep => ep.animeId === anime.id).forEach(ep => {
+        map[ep.id] = isEpisodeAvailableOffline(ep.id);
+      });
+      setOfflineMap(map);
+    };
+
+    updateOfflineMap();
+    window.addEventListener(OFFLINE_CHANGE_EVENT, updateOfflineMap);
+    return () => {
+      window.removeEventListener(OFFLINE_CHANGE_EVENT, updateOfflineMap);
+    };
+  }, [anime, episodes]);
+
+  const handleToggleOffline = (e: React.MouseEvent, ep: Episode) => {
+    e.stopPropagation();
+    if (!anime) return;
+    const res = toggleEpisodeOffline(ep, anime);
+    setOfflineMap(prev => ({
+      ...prev,
+      [ep.id]: res.isOffline
+    }));
+  };
 
   if (!anime) return null;
 
@@ -211,6 +240,20 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                     </button>
 
                     <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                      {/* Available Offline Toggle Button */}
+                      <button
+                        onClick={(e) => handleToggleOffline(e, ep)}
+                        className={`px-2.5 py-1.5 rounded-full border text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                          offlineMap[ep.id]
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30 shadow'
+                            : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                        }`}
+                        title={offlineMap[ep.id] ? "ऑफ़लाइन उपलब्ध है (हटाने के लिए क्लिक करें)" : "बिना इंटरनेट देखने के लिए ऑफ़लाइन सेव करें (Save Offline)"}
+                      >
+                        <HardDriveDownload className={`w-3.5 h-3.5 ${offlineMap[ep.id] ? 'text-emerald-400' : 'text-zinc-400'}`} />
+                        <span className="hidden md:inline">{offlineMap[ep.id] ? 'ऑफ़लाइन ✓' : 'ऑफ़लाइन'}</span>
+                      </button>
+
                       <button
                         onClick={() => onPlayEpisode(anime.id, ep.episodeNumber)}
                         className="px-3 py-1.5 rounded-full bg-[#FF640A] hover:bg-[#e05300] text-black font-extrabold text-[11px] uppercase flex items-center gap-1.5 transition-colors cursor-pointer"

@@ -30,6 +30,8 @@ export interface MediaAudioTrack {
   label: string;
   codec?: string;
   isDefault?: boolean;
+  audioUrl?: string;
+  videoUrl?: string;
 }
 
 export interface MediaSubtitleTrack {
@@ -39,6 +41,7 @@ export interface MediaSubtitleTrack {
   label: string;
   codec?: string;
   isDefault?: boolean;
+  subUrl?: string;
 }
 
 export interface Episode {
@@ -124,3 +127,23 @@ export interface FilterOptions {
   selectedType: string;
   sortBy: 'popular' | 'rating' | 'newest' | 'title';
 }
+
+export interface OfflineEpisode {
+  episodeId: string;
+  animeId: string;
+  animeTitle: string;
+  episodeNumber: number;
+  title: string;
+  synopsis?: string;
+  thumbnailUrl: string;
+  videoUrl: string;
+  duration: number;
+  quality?: string;
+  language?: string;
+  seasonName?: string;
+  partRange?: string;
+  markedOfflineAt: string;
+  isAvailableOffline: boolean;
+  estimatedSizeBytes?: number;
+}
+

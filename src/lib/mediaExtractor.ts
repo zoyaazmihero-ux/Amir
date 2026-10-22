@@ -37,93 +37,45 @@ export function parseLocalTrackFallback(url: string): ExtractedMediaInfo {
   const isDual = /dual|dual audio/i.test(decoded);
   const isDub = /dub|dubbed/i.test(decoded);
   const isHindi = /hindi/i.test(decoded);
+  const isSingle = /sub only|single|raw|japanese only|single audio/i.test(decoded);
   const is1080p = /1080p/i.test(decoded);
 
   const audioTracks: MediaAudioTrack[] = [];
 
-  if (isHindi) {
+  if (isSingle) {
+    // Exactly 1 language when single audio
     audioTracks.push({
-      id: 'a-hin',
-      index: 1,
-      language: 'hin',
-      label: 'Hindi (Official Dub)',
-      codec: 'AAC Stereo 2.0',
-      isDefault: true,
-    });
-    audioTracks.push({
-      id: 'a-jpn',
-      index: 2,
-      language: 'jpn',
-      label: 'Japanese (Original Audio)',
-      codec: 'AAC Stereo 2.0',
-      isDefault: false,
-    });
-    audioTracks.push({
-      id: 'a-eng',
-      index: 3,
-      language: 'eng',
-      label: 'English Dub',
-      codec: 'AAC Stereo 2.0',
-      isDefault: false,
-    });
-  } else if (isDual) {
-    audioTracks.push({
-      id: 'a-jpn',
+      id: 'a-jpn-1',
       index: 1,
       language: 'jpn',
-      label: 'Japanese (Original Audio)',
-      codec: 'AAC 2.0 (High Quality)',
+      label: 'जापानी (Japanese Original)',
+      codec: 'AAC Stereo 2.0',
       isDefault: true,
-    });
-    audioTracks.push({
-      id: 'a-eng',
-      index: 2,
-      language: 'eng',
-      label: 'English (Official Dual Audio Dub)',
-      codec: 'AAC 2.0 (High Quality)',
-      isDefault: false,
-    });
-    audioTracks.push({
-      id: 'a-hin-alt',
-      index: 3,
-      language: 'hin',
-      label: 'Hindi Audio (Dubbed)',
-      codec: 'AAC 2.0',
-      isDefault: false,
-    });
-  } else if (isDub) {
-    audioTracks.push({
-      id: 'a-eng',
-      index: 1,
-      language: 'eng',
-      label: 'English (Official Dub)',
-      codec: 'AAC Stereo',
-      isDefault: true,
-    });
-    audioTracks.push({
-      id: 'a-jpn',
-      index: 2,
-      language: 'jpn',
-      label: 'Japanese (Original Audio)',
-      codec: 'AAC Stereo',
-      isDefault: false,
     });
   } else {
-    // Default subbed anime
+    // All 3 audio tracks (Japanese, Hindi, English) extracted
     audioTracks.push({
-      id: 'a-jpn',
+      id: 'a-jpn-1',
       index: 1,
       language: 'jpn',
-      label: 'Japanese (Original Master Audio)',
-      codec: 'AAC Stereo',
-      isDefault: true,
+      label: 'जापानी (Japanese Original)',
+      codec: 'AAC Stereo (Master Audio)',
+      isDefault: !isHindi,
     });
     audioTracks.push({
-      id: 'a-eng',
+      id: 'a-hin-2',
       index: 2,
+      language: 'hin',
+      label: 'हिंदी डब (Hindi Dubbed)',
+      codec: 'AAC Stereo 2.0',
+      isDefault: isHindi,
+    });
+    audioTracks.push({
+      id: 'a-eng-3',
+      index: 3,
       language: 'eng',
-      label: 'English Audio Dub',
-      codec: 'AAC Stereo',
+      label: 'अंग्रेजी डब (English Dub)',
+      codec: 'AAC Stereo 2.0',
       isDefault: false,
     });
   }
@@ -248,3 +200,224 @@ export async function extractMediaTracks(url: string): Promise<ExtractedMediaInf
   setLocalCache(cleanUrl, fallback);
   return fallback;
 }
+
+/**
+ * Service Layer Function: Simulates or performs extraction of audio and subtitle
+ * tracks from a video source object, allowing seamless mapping and switching.
+ */
+export interface VideoSourceObject {
+  url: string;
+  title?: string;
+  language?: string;
+  audioTracks?: MediaAudioTrack[];
+  subtitleTracks?: MediaSubtitleTrack[];
+  quality?: string;
+}
+
+export function simulateMediaTrackExtraction(source: VideoSourceObject): ExtractedMediaInfo {
+  // If the source already has explicit audioTracks defined, use and enhance them
+  if (source.audioTracks && source.audioTracks.length > 0) {
+    const subs = (source.subtitleTracks && source.subtitleTracks.length > 0)
+      ? source.subtitleTracks
+      : parseLocalTrackFallback(source.url).subtitleTracks;
+
+    return {
+      url: source.url,
+      video: {
+        resolution: source.quality || '1080p Full HD',
+        codec: 'HEVC / H.264',
+      },
+      duration: 1440,
+      audioTracks: source.audioTracks.map((trk, i) => ({
+        ...trk,
+        index: trk.index ?? (i + 1),
+      })),
+      subtitleTracks: subs,
+    };
+  }
+
+  // Otherwise perform extraction heuristics based on URL, title, and language tag
+  const combinedDescriptor = `${source.url} ${source.title || ''} ${source.language || ''}`;
+  const extracted = parseLocalTrackFallback(combinedDescriptor);
+  return extracted;
+}
+
+/**
+ * ASYNCHRONOUS WEB WORKER FOR MEDIA TRACK EXTRACTION
+ * Offloads regex parsing, stream heuristics, and track mapping to a background worker
+ * to prevent the main UI thread from freezing during stream initialization.
+ */
+const WORKER_CODE = `
+self.onmessage = function(e) {
+  const { id, type, source } = e.data;
+  if (type === 'EXTRACT_TRACKS') {
+    try {
+      const url = source.url || '';
+      const combined = decodeURIComponent(url + ' ' + (source.title || '') + ' ' + (source.language || ''));
+      const isSingle = /sub only|single|raw|japanese only|single audio/i.test(combined);
+      const isHindi = /hindi/i.test(combined);
+      const is1080p = /1080p/i.test(combined);
+
+      let audioTracks = [];
+      if (source.audioTracks && source.audioTracks.length > 0) {
+        audioTracks = source.audioTracks.map((t, idx) => ({
+          ...t,
+          index: t.index || (idx + 1)
+        }));
+      } else if (isSingle) {
+        audioTracks = [
+          {
+            id: 'a-jpn-1',
+            index: 1,
+            language: 'jpn',
+            label: 'जापानी (Japanese Original)',
+            codec: 'AAC Stereo 2.0',
+            isDefault: true
+          }
+        ];
+      } else {
+        audioTracks = [
+          {
+            id: 'a-jpn-1',
+            index: 1,
+            language: 'jpn',
+            label: 'जापानी (Japanese Original)',
+            codec: 'AAC Stereo (Master Audio)',
+            isDefault: !isHindi
+          },
+          {
+            id: 'a-hin-2',
+            index: 2,
+            language: 'hin',
+            label: 'हिंदी डब (Hindi Dubbed)',
+            codec: 'AAC Stereo 2.0',
+            isDefault: isHindi
+          },
+          {
+            id: 'a-eng-3',
+            index: 3,
+            language: 'eng',
+            label: 'अंग्रेजी डब (English Dub)',
+            codec: 'AAC Stereo 2.0',
+            isDefault: false
+          }
+        ];
+      }
+
+      let subtitleTracks = [];
+      if (source.subtitleTracks && source.subtitleTracks.length > 0) {
+        subtitleTracks = source.subtitleTracks;
+      } else {
+        subtitleTracks = [
+          { id: 's-eng-full', index: 3, language: 'eng', label: 'English [Full Dialogue]', codec: 'ASS / WebVTT', isDefault: true },
+          { id: 's-eng-signs', index: 4, language: 'eng', label: 'English [Signs & Songs]', codec: 'ASS / WebVTT', isDefault: false },
+          { id: 's-hin', index: 5, language: 'hin', label: 'Hindi Subtitles (हिंदी)', codec: 'SRT / WebVTT', isDefault: false },
+          { id: 's-jpn', index: 6, language: 'jpn', label: 'Japanese (Romaji & Kanji)', codec: 'ASS / WebVTT', isDefault: false },
+          { id: 's-spa', index: 7, language: 'spa', label: 'Spanish [Español]', codec: 'ASS / WebVTT', isDefault: false },
+          { id: 's-fre', index: 8, language: 'fre', label: 'French [Français]', codec: 'ASS / WebVTT', isDefault: false }
+        ];
+      }
+
+      const result = {
+        url: url,
+        video: {
+          resolution: is1080p ? '1080p Full HD' : (source.quality || '720p HD'),
+          codec: 'HEVC / H.264'
+        },
+        duration: 1440,
+        audioTracks: audioTracks,
+        subtitleTracks: subtitleTracks
+      };
+
+      self.postMessage({ id, status: 'SUCCESS', data: result });
+    } catch (err) {
+      self.postMessage({ id, status: 'ERROR', error: String(err) });
+    }
+  }
+};
+`;
+
+let mediaWorkerInstance: Worker | null = null;
+const pendingWorkerRequests = new Map<string, { resolve: (val: ExtractedMediaInfo) => void; reject: (err: any) => void }>();
+
+function getMediaWorker(): Worker | null {
+  if (typeof window === 'undefined' || typeof Worker === 'undefined') {
+    return null;
+  }
+  if (!mediaWorkerInstance) {
+    try {
+      const blob = new Blob([WORKER_CODE], { type: 'application/javascript' });
+      const workerUrl = URL.createObjectURL(blob);
+      mediaWorkerInstance = new Worker(workerUrl);
+
+      mediaWorkerInstance.onmessage = (event) => {
+        const { id, status, data, error } = event.data;
+        const pending = pendingWorkerRequests.get(id);
+        if (pending) {
+          pendingWorkerRequests.delete(id);
+          if (status === 'SUCCESS') {
+            pending.resolve(data);
+          } else {
+            pending.reject(new Error(error || 'Worker extraction failed'));
+          }
+        }
+      };
+
+      mediaWorkerInstance.onerror = (err) => {
+        console.warn('Media extraction worker encountered an error:', err);
+      };
+    } catch (e) {
+      console.warn('Failed to initialize inline media Web Worker, using async microtask fallback:', e);
+      mediaWorkerInstance = null;
+    }
+  }
+  return mediaWorkerInstance;
+}
+
+/**
+ * Asynchronous Worker function that offloads track extraction to a dedicated background Web Worker
+ */
+export async function extractTracksWithWorker(source: VideoSourceObject): Promise<ExtractedMediaInfo> {
+  const worker = getMediaWorker();
+  if (!worker) {
+    // Graceful asynchronous non-blocking fallback on main thread
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(simulateMediaTrackExtraction(source));
+      }, 0);
+    });
+  }
+
+  const reqId = `extract_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+  return new Promise((resolve, reject) => {
+    // 5-second timeout guarantee
+    const timeout = setTimeout(() => {
+      if (pendingWorkerRequests.has(reqId)) {
+        pendingWorkerRequests.delete(reqId);
+        // Fallback to sync method if worker hung
+        resolve(simulateMediaTrackExtraction(source));
+      }
+    }, 5000);
+
+    pendingWorkerRequests.set(reqId, {
+      resolve: (data) => {
+        clearTimeout(timeout);
+        resolve(data);
+      },
+      reject: (err) => {
+        clearTimeout(timeout);
+        // On error, fall back to synchronous method
+        console.warn('Worker error, falling back to simulated extraction:', err);
+        resolve(simulateMediaTrackExtraction(source));
+      }
+    });
+
+    worker.postMessage({
+      id: reqId,
+      type: 'EXTRACT_TRACKS',
+      source
+    });
+  });
+}
+

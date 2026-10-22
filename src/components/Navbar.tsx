@@ -8,9 +8,13 @@ import {
   Tv, 
   Search, 
   X,
-  ChevronRight
+  ChevronRight,
+  Rocket,
+  WifiOff,
+  HardDriveDownload
 } from 'lucide-react';
 import { Anime, MainTab } from '../types';
+import { getOfflineEpisodes, OFFLINE_CHANGE_EVENT } from '../lib/storage';
 
 interface NavbarProps {
   currentTab: MainTab;
@@ -18,6 +22,7 @@ interface NavbarProps {
   animeList: Anime[];
   onSelectAnime: (anime: Anime) => void;
   userEmail?: string;
+  onOpenDeployModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -25,9 +30,28 @@ export const Navbar: React.FC<NavbarProps> = ({
   setCurrentTab,
   animeList,
   onSelectAnime,
+  onOpenDeployModal,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [offlineCount, setOfflineCount] = useState<number>(() => getOfflineEpisodes().length);
+
+  React.useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    const syncOfflineCount = () => setOfflineCount(getOfflineEpisodes().length);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener(OFFLINE_CHANGE_EVENT, syncOfflineCount);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener(OFFLINE_CHANGE_EVENT, syncOfflineCount);
+    };
+  }, []);
 
   const searchResults = searchQuery.trim()
     ? animeList.filter(a =>
@@ -76,9 +100,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => setCurrentTab('lists')}
-              className={`transition-colors cursor-pointer ${currentTab === 'lists' ? 'text-[#FF640A]' : 'text-zinc-300 hover:text-white'}`}
+              className={`transition-colors cursor-pointer flex items-center gap-1.5 ${currentTab === 'lists' ? 'text-[#FF640A]' : 'text-zinc-300 hover:text-white'}`}
             >
-              My Lists
+              <span>My Lists</span>
+              {offlineCount > 0 && (
+                <span 
+                  title={`${offlineCount} episodes available offline`}
+                  className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-black flex items-center gap-0.5"
+                >
+                  <HardDriveDownload className="w-2.5 h-2.5" />
+                  {offlineCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setCurrentTab('browse')}
@@ -100,8 +133,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Right Header Controls: Cast & Search */}
-          <div className="flex items-center gap-3">
+          {/* Right Header Controls: Cast, Deploy & Search */}
+          <div className="flex items-center gap-2.5">
+            {!isOnline && (
+              <span className="px-2.5 py-1 rounded-full bg-red-950/80 border border-red-800 text-red-300 text-[11px] font-bold flex items-center gap-1.5">
+                <WifiOff className="w-3.5 h-3.5 text-red-400" />
+                Offline
+              </span>
+            )}
+            {/* Deploy to Render Action Button */}
+            {onOpenDeployModal && (
+              <button
+                onClick={onOpenDeployModal}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#FF640A]/20 to-orange-500/20 border border-[#FF640A]/40 text-[#FF640A] hover:bg-[#FF640A] hover:text-black font-extrabold text-xs transition-all cursor-pointer shadow-sm shadow-orange-500/10 group"
+                title="Deploy to Render.com Guide"
+              >
+                <Rocket className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform" />
+                <span>Deploy on Render</span>
+              </button>
+            )}
+
             {/* Chromecast Icon */}
             <button 
               className="p-1.5 text-zinc-300 hover:text-white cursor-pointer"
@@ -199,11 +250,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* 2. My Lists */}
           <button
             onClick={() => setCurrentTab('lists')}
-            className={`flex flex-col items-center justify-center py-1 cursor-pointer ${
+            className={`flex flex-col items-center justify-center py-1 cursor-pointer relative ${
               currentTab === 'lists' ? 'text-[#FF640A]' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <Bookmark className="w-5 h-5" />
+            <div className="relative">
+              <Bookmark className="w-5 h-5" />
+              {offlineCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-black" />
+              )}
+            </div>
             <span className="text-[10px] font-medium mt-0.5">My Lists</span>
           </button>
 

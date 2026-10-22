@@ -16,9 +16,13 @@ import {
   LogOut, 
   User, 
   Upload,
-  Check
+  Check,
+  Rocket,
+  HardDriveDownload,
+  Trash2
 } from 'lucide-react';
 import { MainTab } from '../types';
+import { getOfflineStorageEstimate, clearAllOfflineEpisodes, OFFLINE_CHANGE_EVENT } from '../lib/storage';
 
 interface AccountPageProps {
   userEmail: string;
@@ -28,6 +32,7 @@ interface AccountPageProps {
   onOpenAuthModal: () => void;
   onOpenUploader: () => void;
   setCurrentTab: (tab: MainTab) => void;
+  onOpenDeployModal?: () => void;
 }
 
 export const AccountPage: React.FC<AccountPageProps> = ({
@@ -38,6 +43,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   onOpenAuthModal,
   onOpenUploader,
   setCurrentTab,
+  onOpenDeployModal,
 }) => {
   const [profilePin, setProfilePin] = useState(false);
   const [closedCaptions, setClosedCaptions] = useState(false);
@@ -45,6 +51,20 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const [audioLang, setAudioLang] = useState('English');
   const [subLang, setSubLang] = useState('English');
   const [contentRestriction, setContentRestriction] = useState('A');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [offlineInfo, setOfflineInfo] = useState(getOfflineStorageEstimate);
+
+  React.useEffect(() => {
+    const sync = () => setOfflineInfo(getOfflineStorageEstimate());
+    sync();
+    window.addEventListener(OFFLINE_CHANGE_EVENT, sync);
+    return () => window.removeEventListener(OFFLINE_CHANGE_EVENT, sync);
+  }, []);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
 
   const displayName = isLoggedIn ? (userEmail.split('@')[0] || 'Bratheronlinework') : 'Bratheronlinework';
 
@@ -70,7 +90,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 </div>
               </div>
               <button 
-                onClick={() => alert('Change profile avatar')}
+                onClick={() => showToast('Profile avatar customization')}
                 className="absolute bottom-0 right-0 p-1.5 rounded-full bg-zinc-800 text-white hover:bg-[#FF640A] hover:text-black transition-colors border border-zinc-900"
               >
                 <Pencil className="w-3 h-3" />
@@ -90,7 +110,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           {/* Profile Options Rows */}
           <div className="divide-y divide-zinc-900 pt-2 border-t border-zinc-900">
             <button 
-              onClick={() => alert('Switch profile')}
+              onClick={() => showToast('Profile switcher')}
               className="w-full py-3 flex items-center justify-between text-xs font-bold text-zinc-200 hover:text-[#FF640A] transition-colors"
             >
               <span>Switch Profile</span>
@@ -137,7 +157,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             </button>
 
             <button 
-              onClick={() => alert('Audio descriptions setting')}
+              onClick={() => showToast('Audio descriptions setting')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white"
             >
               <span>Audio Descriptions</span>
@@ -175,7 +195,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           <div className="bg-zinc-950 rounded-xl border border-zinc-900 divide-y divide-zinc-900">
             
             <button 
-              onClick={() => alert('Crunchyroll Premium Upgrade: $7.99/mo with 14-day Free Trial')}
+              onClick={() => showToast('Crunchyroll Premium Upgrade: $7.99/mo with 14-day Free Trial')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white"
             >
               <span className="flex items-center gap-2">
@@ -188,7 +208,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             </button>
 
             <button 
-              onClick={() => alert('Notification settings')}
+              onClick={() => showToast('Notification settings')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white"
             >
               <span>Notifications</span>
@@ -196,7 +216,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             </button>
 
             <button 
-              onClick={() => alert('Change email address')}
+              onClick={() => showToast('Change email address')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white"
             >
               <span>Email</span>
@@ -206,7 +226,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             </button>
 
             <button 
-              onClick={() => alert('Change password')}
+              onClick={() => showToast('Change password')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white"
             >
               <span>Password</span>
@@ -214,7 +234,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             </button>
 
             <button 
-              onClick={() => alert('Add phone number')}
+              onClick={() => showToast('Add phone number')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white"
             >
               <span>Add Phone Number</span>
@@ -242,7 +262,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             </div>
 
             <button 
-              onClick={() => alert('Notification settings')}
+              onClick={() => showToast('Notification settings')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white"
             >
               <span>Notification Settings</span>
@@ -250,7 +270,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             </button>
 
             <button 
-              onClick={() => alert('Connected apps')}
+              onClick={() => showToast('Connected apps')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white"
             >
               <span>Connected Apps</span>
@@ -269,10 +289,71 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               <ChevronRight className="w-4 h-4 text-[#FF640A]" />
             </button>
 
+            {/* Deploy on Render Option */}
+            {onOpenDeployModal && (
+              <button 
+                onClick={onOpenDeployModal}
+                className="w-full p-3.5 flex items-center justify-between text-xs font-bold text-white hover:bg-zinc-900 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Rocket className="w-4 h-4 text-[#FF640A]" />
+                  Deploy to Render.com (Guide & Config)
+                </span>
+                <span className="flex items-center gap-1.5 text-[#FF640A] text-[11px]">
+                  Ready <ChevronRight className="w-4 h-4 text-zinc-500" />
+                </span>
+              </button>
+            )}
+
           </div>
         </div>
 
-        {/* SECTION 4: Privacy */}
+        {/* SECTION 4: Offline Storage & Downloads (LocalStorage Caching) */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-extrabold text-zinc-400 uppercase tracking-wider">
+              Offline Storage (ऑफ़लाइन स्टोरेज)
+            </h3>
+            <span className="text-[10px] text-emerald-400 font-bold">
+              {offlineInfo.totalCount} Saved • ~{offlineInfo.formattedSize}
+            </span>
+          </div>
+          <div className="bg-zinc-950 rounded-xl border border-zinc-900 divide-y divide-zinc-900">
+            <button 
+              onClick={() => setCurrentTab('lists')}
+              className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white cursor-pointer hover:bg-zinc-900 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <HardDriveDownload className="w-4 h-4 text-emerald-400" />
+                <span>Manage Offline Episodes</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-zinc-400 text-xs">
+                <span>{offlineInfo.totalCount > 0 ? `${offlineInfo.totalCount} Episodes` : 'Empty'}</span>
+                <ChevronRight className="w-4 h-4 text-zinc-500" />
+              </span>
+            </button>
+
+            {offlineInfo.totalCount > 0 && (
+              <button 
+                onClick={() => {
+                  if (window.confirm('Delete all offline cached episodes from localStorage?')) {
+                    clearAllOfflineEpisodes();
+                    showToast('Offline storage cleared');
+                  }
+                }}
+                className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-950/20 transition-colors cursor-pointer"
+              >
+                <span className="flex items-center gap-2">
+                  <Trash2 className="w-4 h-4 text-red-400" />
+                  <span>Clear All Offline Data</span>
+                </span>
+                <span className="text-[11px] text-zinc-500">Free ~{offlineInfo.formattedSize}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* SECTION 5: Privacy */}
         <div className="space-y-1">
           <h3 className="text-xs font-extrabold text-zinc-400 uppercase tracking-wider px-1">
             Privacy
@@ -280,7 +361,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           <div className="bg-zinc-950 rounded-xl border border-zinc-900 divide-y divide-zinc-900">
             
             <button 
-              onClick={() => alert('Privacy choices')}
+              onClick={() => showToast('Privacy choices updated')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white"
             >
               <span>Don't Sell/Share my personal information</span>
@@ -288,7 +369,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             </button>
 
             <button 
-              onClick={() => alert('Delete account options')}
+              onClick={() => showToast('Delete account request received')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-red-400 hover:text-red-300"
             >
               <span>Delete My Account</span>
@@ -305,7 +386,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           </h3>
           <div className="bg-zinc-950 rounded-xl border border-zinc-900">
             <button 
-              onClick={() => alert('Contacting Crunchyroll Support...')}
+              onClick={() => showToast('Connecting to 24/7 Crunchyroll Support...')}
               className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-200 hover:text-white"
             >
               <span>Need Help?</span>
@@ -338,13 +419,21 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         <div className="pt-8 text-center text-[11px] text-zinc-500 space-y-1">
           <p>Version 3.113.2 (1165)</p>
           <div className="flex items-center justify-center gap-4 text-zinc-400 font-medium">
-            <button onClick={() => alert('Terms of Service')} className="hover:underline">Terms of Service</button>
+            <button onClick={() => showToast('Terms of Service')} className="hover:underline">Terms of Service</button>
             <span>•</span>
-            <button onClick={() => alert('Privacy Policy')} className="hover:underline">Privacy Policy</button>
+            <button onClick={() => showToast('Privacy Policy')} className="hover:underline">Privacy Policy</button>
           </div>
         </div>
 
       </div>
+
+      {/* Floating Toast Notification */}
+      {toastMsg && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-zinc-900 border border-[#FF640A]/40 text-white text-xs font-bold rounded-full shadow-2xl animate-fade-in flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-[#FF640A]"></div>
+          <span>{toastMsg}</span>
+        </div>
+      )}
 
     </div>
   );

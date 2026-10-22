@@ -20,19 +20,29 @@ export const BrowseCatalog: React.FC<BrowseCatalogProps> = ({
   onToggleWatchlist,
   setCurrentTab,
 }) => {
-  const [subTab, setSubTab] = useState<'all' | 'simulcasts' | 'genres' | 'music'>('all');
+  const [subTab, setSubTab] = useState<'all' | 'korean' | 'movies' | 'simulcasts' | 'genres' | 'music'>('all');
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'popular' | 'rating' | 'newest' | 'title'>('popular');
   const [showFilterModal, setShowFilterModal] = useState(false);
 
   const genresList = [
     'All', 'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 
-    'Isekai', 'Music', 'Romance', 'Sci-Fi', 'Shonen', 'Slice of Life', 'Supernatural'
+    'Isekai', 'Music', 'Romance', 'Sci-Fi', 'Shonen', 'Slice of Life', 'Supernatural', 'Thriller'
   ];
 
   // Filter & Sort Logic
   let filtered = animeList.filter(a => {
-    if (subTab === 'music' && !a.genres.includes('Music')) return false;
+    if (subTab === 'movies') {
+      if (a.type !== 'Movie') return false;
+    } else if (subTab === 'korean') {
+      const isKorean = 
+        /korean|k-drama|korea|오징어|나 혼자만|외모지상주의|지금 우리 학교는|스위트홈|신의 탑|갓 오브 하이스쿨/i.test(a.japaneseTitle || '') ||
+        /korean|solo leveling|squid game|lookism|all of us are dead|tower of god|god of high school|sweet home/i.test(a.title) ||
+        /korean|k-drama|webtoon/i.test(a.synopsis);
+      if (!isKorean) return false;
+    } else if (subTab === 'music' && !a.genres.includes('Music')) {
+      return false;
+    }
     if (selectedGenre !== 'All' && !a.genres.includes(selectedGenre as any)) return false;
     return true;
   });
@@ -59,7 +69,25 @@ export const BrowseCatalog: React.FC<BrowseCatalogProps> = ({
                 subTab === 'all' ? 'border-[#FF640A] text-[#FF640A]' : 'border-transparent text-zinc-400 hover:text-white'
               }`}
             >
-              All Anime
+              All Shows
+            </button>
+
+            <button
+              onClick={() => { setSubTab('korean'); setSelectedGenre('All'); }}
+              className={`py-3.5 text-xs font-extrabold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+                subTab === 'korean' ? 'border-[#FF640A] text-[#FF640A]' : 'border-transparent text-zinc-400 hover:text-white'
+              }`}
+            >
+              🇰🇷 Korean Series (K-Dramas)
+            </button>
+
+            <button
+              onClick={() => { setSubTab('movies'); setSelectedGenre('All'); }}
+              className={`py-3.5 text-xs font-extrabold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap cursor-pointer ${
+                subTab === 'movies' ? 'border-[#FF640A] text-[#FF640A]' : 'border-transparent text-zinc-400 hover:text-white'
+              }`}
+            >
+              🎬 Movies
             </button>
 
             <button
@@ -75,7 +103,7 @@ export const BrowseCatalog: React.FC<BrowseCatalogProps> = ({
                 subTab === 'genres' ? 'border-[#FF640A] text-[#FF640A]' : 'border-transparent text-zinc-400 hover:text-white'
               }`}
             >
-              Anime Genres
+              Genres
             </button>
 
             <button

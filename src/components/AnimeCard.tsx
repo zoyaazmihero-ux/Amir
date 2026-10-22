@@ -32,7 +32,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           alt={anime.title}
           referrerPolicy="no-referrer"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+            (e.target as HTMLImageElement).src = anime.bannerImage || 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-73IhOXpJZiDY.png';
           }}
           className="w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-300 bg-zinc-900"
         />
